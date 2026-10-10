@@ -1,0 +1,39 @@
+{
+  "name": "campus-360",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Campus 360 platform for TGPCET - Phase 1 Foundation",
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "concurrently -n \"backend,frontend\" -c \"blue,green\" \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "npm run dev --workspace=backend",
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "build": "npm run build --workspaces --if-present",
+    "build:backend": "npm run build --workspace=backend",
+    "build:frontend": "npm run build --workspace=frontend",
+    "test": "npm run test --workspaces --if-present",
+    "test:backend": "npm run test --workspace=backend",
+    "test:frontend": "npm run test --workspace=frontend",
+    "test:db": "npm run test:db --workspace=backend",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "typecheck:backend": "npm run typecheck --workspace=backend",
+    "typecheck:frontend": "npm run typecheck --workspace=frontend",
+    "db:generate": "npm run db:generate --workspace=backend",
+    "db:migrate": "npm run db:migrate --workspace=backend",
+    "db:seed": "npm run db:seed --workspace=backend"
+  },
+  "keywords": [
+    "campus-360",
+    "tgpcet",
+    "education-erp",
+    "phase-1"
+  ],
+  "author": "TGPCET Campus 360 Team",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "concurrently": "^10.0.5"
+  }
+}

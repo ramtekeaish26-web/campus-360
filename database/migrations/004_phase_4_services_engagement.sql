@@ -1,0 +1,238 @@
+-- Migration: 004_phase_4_services_engagement.sql
+-- Description: Phase 4 Campus Services & Engagement DDL for TGPCET Campus 360
+-- Includes: Notices, Events, Clubs, Helpdesk, Lost & Found, Emergency Directory, Feedback, Notifications
+
+-- 1. NOTICES TABLE
+CREATE TABLE IF NOT EXISTS notices (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title VARCHAR(255) NOT NULL,
+    summary TEXT,
+    content TEXT NOT NULL,
+    category VARCHAR(50) NOT NULL DEFAULT 'GENERAL', -- ACADEMIC, EXAM, ADMINISTRATIVE, DEPARTMENT, GENERAL, EMERGENCY
+    priority VARCHAR(50) NOT NULL DEFAULT 'NORMAL', -- NORMAL, IMPORTANT, URGENT
+    published_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP WITH TIME ZONE,
+    author_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    department_id UUID REFERENCES departments(id) ON DELETE SET NULL,
+    status VARCHAR(50) NOT NULL DEFAULT 'PUBLISHED', -- DRAFT, PUBLISHED, ARCHIVED
+    audience VARCHAR(50) NOT NULL DEFAULT 'ALL', -- ALL, STUDENT, FACULTY, ADMIN
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_notices_status_audience ON notices(status, audience);
+CREATE INDEX IF NOT EXISTS idx_notices_priority_published ON notices(priority, published_at DESC);
+
+-- 2. NOTICE READS TABLE
+CREATE TABLE IF NOT EXISTS notice_reads (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    notice_id UUID NOT NULL REFERENCES notices(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    read_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_notice_user_read UNIQUE (notice_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_notice_reads_user ON notice_reads(user_id);
+
+-- 3. EVENTS TABLE
+CREATE TABLE IF NOT EXISTS events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title VARCHAR(255) NOT NULL,
+    description TEXT NOT NULL,
+    category VARCHAR(50) NOT NULL DEFAULT 'OTHER', -- ACADEMIC, CULTURAL, SPORTS, TECHNICAL, WORKSHOP, SEMINAR, CLUB, OTHER
+    start_date_time TIMESTAMP WITH TIME ZONE NOT NULL,
+    end_date_time TIMESTAMP WITH TIME ZONE NOT NULL,
+    location_id UUID REFERENCES campus_places(id) ON DELETE SET NULL,
+    venue VARCHAR(255),
+    organizer_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    capacity INTEGER,
+    registration_required BOOLEAN NOT NULL DEFAULT FALSE,
+    status VARCHAR(50) NOT NULL DEFAULT 'PUBLISHED', -- DRAFT, PUBLISHED, CANCELLED, COMPLETED
+    image VARCHAR(512),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_events_start_status ON events(start_date_time, status);
+
+-- 4. EVENT REGISTRATIONS TABLE
+CREATE TABLE IF NOT EXISTS event_registrations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_id UUID NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    registered_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    status VARCHAR(50) NOT NULL DEFAULT 'REGISTERED', -- REGISTERED, CANCELLED, ATTENDED
+    CONSTRAINT uq_event_user_reg UNIQUE (event_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_event_registrations_user ON event_registrations(user_id);
+
+-- 5. CLUBS TABLE
+CREATE TABLE IF NOT EXISTS clubs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(255) NOT NULL,
+    slug VARCHAR(255) NOT NULL UNIQUE,
+    description TEXT NOT NULL,
+    category VARCHAR(50) NOT NULL DEFAULT 'TECHNICAL', -- TECHNICAL, CULTURAL, SPORTS, ACADEMIC, SOCIAL, OTHER
+    department_id UUID REFERENCES departments(id) ON DELETE SET NULL,
+    logo VARCHAR(512),
+    status VARCHAR(50) NOT NULL DEFAULT 'ACTIVE', -- ACTIVE, INACTIVE
+    created_by UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 6. CLUB MEMBERSHIPS TABLE
+CREATE TABLE IF NOT EXISTS club_memberships (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    club_id UUID NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role VARCHAR(50) NOT NULL DEFAULT 'MEMBER', -- MEMBER, LEAD, ADMIN
+    joined_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    status VARCHAR(50) NOT NULL DEFAULT 'ACTIVE', -- ACTIVE, PENDING, LEFT
+    CONSTRAINT uq_club_user_membership UNIQUE (club_id, user_id)
+);
+
+-- 7. SERVICE CATEGORIES TABLE
+CREATE TABLE IF NOT EXISTS service_categories (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    code VARCHAR(50) NOT NULL UNIQUE,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    icon VARCHAR(100),
+    display_order INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 8. SERVICE REQUESTS (CAMPUS HELPDESK) TABLE
+CREATE TABLE IF NOT EXISTS service_requests (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    requester_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title VARCHAR(255) NOT NULL,
+    description TEXT NOT NULL,
+    category VARCHAR(50) NOT NULL, -- ELECTRICAL, PROJECTOR, WIFI, CLEANLINESS, WATER, FURNITURE, INFRASTRUCTURE, GENERAL
+    priority VARCHAR(50) NOT NULL DEFAULT 'MEDIUM', -- LOW, MEDIUM, HIGH, URGENT
+    status VARCHAR(50) NOT NULL DEFAULT 'OPEN', -- OPEN, ASSIGNED, IN_PROGRESS, RESOLVED, CLOSED, REJECTED
+    location_id UUID REFERENCES campus_places(id) ON DELETE SET NULL,
+    building_id UUID REFERENCES buildings(id) ON DELETE SET NULL,
+    room_id UUID REFERENCES rooms(id) ON DELETE SET NULL,
+    location_details VARCHAR(255),
+    assigned_department_id UUID REFERENCES departments(id) ON DELETE SET NULL,
+    assigned_to UUID REFERENCES users(id) ON DELETE SET NULL,
+    resolved_at TIMESTAMP WITH TIME ZONE,
+    closed_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_service_requests_requester ON service_requests(requester_id);
+CREATE INDEX IF NOT EXISTS idx_service_requests_status_priority ON service_requests(status, priority);
+
+-- 9. SERVICE REQUEST COMMENTS TABLE
+CREATE TABLE IF NOT EXISTS service_request_comments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    request_id UUID NOT NULL REFERENCES service_requests(id) ON DELETE CASCADE,
+    author_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    content TEXT NOT NULL,
+    is_internal BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_request_comments_request ON service_request_comments(request_id);
+
+-- 10. SERVICE REQUEST HISTORY (AUDIT TRAIL) TABLE
+CREATE TABLE IF NOT EXISTS service_request_histories (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    request_id UUID NOT NULL REFERENCES service_requests(id) ON DELETE CASCADE,
+    old_status VARCHAR(50),
+    new_status VARCHAR(50) NOT NULL,
+    changed_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    comment TEXT,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_request_histories_request ON service_request_histories(request_id);
+
+-- 11. LOST & FOUND ITEMS TABLE
+CREATE TABLE IF NOT EXISTS lost_found_items (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    type VARCHAR(50) NOT NULL, -- LOST, FOUND
+    reported_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title VARCHAR(255) NOT NULL,
+    description TEXT NOT NULL,
+    category VARCHAR(50) NOT NULL DEFAULT 'OTHER', -- ID_DOCUMENT, ELECTRONICS, BOOK, CLOTHING, ACCESSORY, OTHER
+    location_id UUID REFERENCES campus_places(id) ON DELETE SET NULL,
+    location_text VARCHAR(255),
+    item_date TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    image VARCHAR(512),
+    status VARCHAR(50) NOT NULL DEFAULT 'OPEN', -- OPEN, CLAIMED, RESOLVED, CLOSED
+    is_moderated BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_lost_found_type_status ON lost_found_items(type, status);
+
+-- 12. LOST & FOUND CLAIMS TABLE
+CREATE TABLE IF NOT EXISTS lost_found_claims (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    item_id UUID NOT NULL REFERENCES lost_found_items(id) ON DELETE CASCADE,
+    claimant_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    description TEXT NOT NULL,
+    contact_info VARCHAR(255),
+    status VARCHAR(50) NOT NULL DEFAULT 'PENDING', -- PENDING, APPROVED, REJECTED
+    moderated_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_lost_found_claims_item ON lost_found_claims(item_id);
+
+-- 13. EMERGENCY CONTACTS TABLE
+CREATE TABLE IF NOT EXISTS emergency_contacts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(255) NOT NULL,
+    category VARCHAR(50) NOT NULL DEFAULT 'SECURITY', -- SECURITY, MEDICAL, FIRE, DISASTER, HELPLINE, ADMIN
+    phone VARCHAR(50) NOT NULL,
+    alt_phone VARCHAR(50),
+    email VARCHAR(255),
+    location_id UUID REFERENCES campus_places(id) ON DELETE SET NULL,
+    location_text VARCHAR(255),
+    instructions TEXT,
+    priority INTEGER NOT NULL DEFAULT 1,
+    is_demo BOOLEAN NOT NULL DEFAULT TRUE,
+    status VARCHAR(50) NOT NULL DEFAULT 'ACTIVE',
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 14. FEEDBACK TABLE
+CREATE TABLE IF NOT EXISTS feedbacks (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    target_type VARCHAR(50) NOT NULL, -- SERVICE, EVENT, FACILITY, GENERAL, HELPDESK
+    target_id VARCHAR(255),
+    rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
+    comment TEXT NOT NULL,
+    status VARCHAR(50) NOT NULL DEFAULT 'PUBLISHED', -- PENDING, PUBLISHED, ARCHIVED
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_feedbacks_target ON feedbacks(target_type, target_id);
+
+-- 15. NOTIFICATIONS TABLE
+CREATE TABLE IF NOT EXISTS notifications (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    type VARCHAR(50) NOT NULL, -- NOTICE, EVENT, SERVICE_REQUEST, LOST_FOUND, SYSTEM
+    title VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+    reference_type VARCHAR(50),
+    reference_id VARCHAR(255),
+    is_read BOOLEAN NOT NULL DEFAULT FALSE,
+    read_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, is_read, created_at DESC);
